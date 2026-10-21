@@ -12,7 +12,6 @@ use windows_sys::Win32::Foundation::HANDLE_FLAG_INHERIT;
 use windows_sys::Win32::Foundation::SetHandleInformation;
 use windows_sys::Win32::System::JobObjects::IsProcessInJob;
 use windows_sys::Win32::System::Threading::CREATE_NO_WINDOW;
-use windows_sys::Win32::System::Threading::DETACHED_PROCESS;
 use windows_sys::Win32::System::Threading::TerminateProcess;
 
 #[tokio::test]
@@ -25,6 +24,12 @@ async fn captured_stdio_closes_while_child_is_alive() {
     if let Ok(role) = std::env::var(ROLE) {
         let home = std::path::PathBuf::from(std::env::var_os(HOME).expect("test home"));
         if role == "child" {
+            #[link(name = "kernel32")]
+            unsafe extern "system" {
+                #[link_name = "GetConsoleWindow"]
+                fn get_console_window() -> isize;
+            }
+            assert_eq!(unsafe { get_console_window() }, 0);
             eprintln!("child stderr");
             std::fs::write(home.join("ready"), []).unwrap();
             tokio::time::sleep(Duration::from_secs(30)).await;
@@ -46,7 +51,7 @@ async fn captured_stdio_closes_while_child_is_alive() {
             .args(["--exact", TEST, "--nocapture"])
             .env(ROLE, "child")
             // The CI job may forbid breakaway; it does not affect stdio inheritance.
-            .creation_flags(DETACHED_PROCESS)
+            .creation_flags(CREATE_NO_WINDOW)
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(std::fs::File::create(home.join("child.log")).unwrap());
@@ -216,7 +221,7 @@ fn detached_launch_preflight_allows_residual_job() {
         let mut probe = std::process::Command::new(&executable)
             .creation_flags(
                 super::CREATE_SUSPENDED
-                    | super::DETACHED_PROCESS
+                    | super::CREATE_NO_WINDOW
                     | super::CREATE_BREAKAWAY_FROM_JOB,
             )
             .spawn()

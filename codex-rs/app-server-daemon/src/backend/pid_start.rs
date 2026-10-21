@@ -119,7 +119,7 @@ impl PidBackend {
             && matches!(
                 tokio::time::timeout(
                     std::time::Duration::from_secs(5),
-                    Command::new(&codex_bin)
+                    Command::from(codex_utils_process::background_command(&codex_bin))
                         .args(["app-server", "--managed-daemon", "--help"])
                         .stdin(Stdio::null())
                         .stdout(Stdio::null())
@@ -173,14 +173,14 @@ impl PidBackend {
         {
             use windows_sys::Win32::System::Threading::CREATE_BREAKAWAY_FROM_JOB;
             use windows_sys::Win32::System::Threading::CREATE_NO_WINDOW;
-            use windows_sys::Win32::System::Threading::DETACHED_PROCESS;
             // A Windows process pins its working directory for its lifetime.
             // Keep both managed children out of the launching project's directory.
             // Sandbox setup may broaden the cwd ACL, so do not use the private state directory.
             command.current_dir(&workdir);
             // Never retry inside the parent's Job Object: that would report a
             // successful launch that dies when the terminal/SSH session closes.
-            command.creation_flags(CREATE_NO_WINDOW | DETACHED_PROCESS | CREATE_BREAKAWAY_FROM_JOB);
+            // DETACHED_PROCESS would cause Windows to ignore CREATE_NO_WINDOW.
+            command.creation_flags(CREATE_NO_WINDOW | CREATE_BREAKAWAY_FROM_JOB);
             if matches!(self.command_kind, PidCommandKind::UpdateLoop { .. }) {
                 match fs::remove_file(self.pid_file.with_extension("ready")).await {
                     Ok(()) => {}

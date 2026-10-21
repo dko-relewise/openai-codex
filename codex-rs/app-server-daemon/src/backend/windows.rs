@@ -43,8 +43,8 @@ use windows_sys::Win32::System::JobObjects::JOBOBJECT_EXTENDED_LIMIT_INFORMATION
 use windows_sys::Win32::System::JobObjects::JobObjectExtendedLimitInformation;
 use windows_sys::Win32::System::JobObjects::SetInformationJobObject;
 use windows_sys::Win32::System::Threading::CREATE_BREAKAWAY_FROM_JOB;
+use windows_sys::Win32::System::Threading::CREATE_NO_WINDOW;
 use windows_sys::Win32::System::Threading::CREATE_SUSPENDED;
-use windows_sys::Win32::System::Threading::DETACHED_PROCESS;
 use windows_sys::Win32::System::Threading::GetCurrentProcess;
 use windows_sys::Win32::System::Threading::GetProcessId;
 use windows_sys::Win32::System::Threading::GetProcessTimes;
@@ -146,14 +146,14 @@ pub(crate) fn ensure_detached_launch(executable: &Path) -> Result<()> {
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
-        .creation_flags(CREATE_SUSPENDED | DETACHED_PROCESS | CREATE_BREAKAWAY_FROM_JOB);
+        .creation_flags(CREATE_SUSPENDED | CREATE_NO_WINDOW | CREATE_BREAKAWAY_FROM_JOB);
     let (mut child, launch_result) = match command.spawn() {
         Ok(child) => (child, Ok(())),
         Err(err) if err.raw_os_error() == Some(ERROR_ACCESS_DENIED as i32) => {
             // Access denied can also mean the file cannot be executed. Only
             // classify a job restriction if removing breakaway makes it work.
             // This diagnostic child stays suspended and is always reaped.
-            command.creation_flags(CREATE_SUSPENDED | DETACHED_PROCESS);
+            command.creation_flags(CREATE_SUSPENDED | CREATE_NO_WINDOW);
             let child = match command.spawn() {
                 Ok(child) => child,
                 Err(_) => return Err(err).context("cannot launch detached daemon"),
